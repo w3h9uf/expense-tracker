@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Connect Bank</title>
+  <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+</head>
+<body>
+  <h1>Connect Your Bank</h1>
+  <button id="link-button">Connect Bank</button>
+
+  <script>
+    // Fetch the link_token from the backend
+    fetch('/api/create_link_token', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+    })
+      .then(response => response.json())
+      .then(data => {
+        const linkToken = data.link_token;
+        console.log('Link Token:', linkToken);
+        const handler = Plaid.create({
+          token: linkToken,
+          onSuccess: function (public_token, metadata) {
+            console.log("Public Token:", public_token);
+            console.log("Metadata:", metadata);
+
+            // Send public_token to the backend
+            fetch('/api/exchange_public_token', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ public_token: public_token }),
+            })
+              .then(response => response.json())
+              .then(data => console.log('Exchange Result:', data))
+              .catch(error => console.error('Error:', error));
+          },
+          onExit: function (err, metadata) {
+            console.log('User exited Plaid Link:', metadata);
+          },
+        });
+
+        document.getElementById('link-button').addEventListener('click', function () {
+          handler.open();
+        });
+      })
+      .catch(error => console.error('Error fetching link token:', error));
+  </script>
+</body>
+</html>
