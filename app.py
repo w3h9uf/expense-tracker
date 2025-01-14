@@ -5,6 +5,8 @@ from flask_migrate import Migrate
 from plaid.api import plaid_api
 from plaid.model.link_token_create_request import LinkTokenCreateRequest
 from plaid.model.link_token_create_request_user import LinkTokenCreateRequestUser
+from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
+from plaid.exceptions import ApiException
 from plaid.configuration import Configuration
 from plaid.api_client import ApiClient
 from plaid.model.country_code import CountryCode
@@ -105,6 +107,37 @@ def create_link_token():
         return jsonify(response.to_dict())
     except Exception as e:
         return jsonify({'error': str(e)}), 400
+
+@app.route('/plaid')
+def plaid_page():
+    return render_template('plaid.html')
+
+@app.route('/api/exchange_public_token', methods=['POST'])
+def exchange_public_token():
+    try:
+        # 从请求体中提取 public_token
+        data = request.get_json()
+        public_token = data.get('public_token')
+        if not public_token:
+            return jsonify({'error': 'Missing public_token'}), 400
+
+        # 构建请求对象
+        request_data = ItemPublicTokenExchangeRequest(public_token=public_token)
+
+        # 调用 Plaid API
+        response = plaid_client.item_public_token_exchange(request_data)
+
+        # 返回 access_token 和其他信息
+        return jsonify({
+            'access_token': response.access_token,
+            'item_id': response.item_id
+        })
+
+    except ApiException as e:
+        return jsonify({'error': str(e)}), 400
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
