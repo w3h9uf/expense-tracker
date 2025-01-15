@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify
+from flask import Flask, render_template, request, redirect, url_for, jsonify, session
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin, login_user, login_required, logout_user, LoginManager
 from flask_migrate import Migrate
@@ -51,6 +51,8 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(150), unique=True, nullable=False)
     password = db.Column(db.String(150), nullable=False)
 
+    plaid_items = db.relationship("PlaidItem", back_populates="user", cascade="all, delete-orphan")
+
 class PlaidItem(db.Model):
     __tablename__ = "plaid_items"
 
@@ -60,7 +62,7 @@ class PlaidItem(db.Model):
     item_id = db.Column(db.String(255), nullable=False, unique=True)
     created_at = db.Column(db.DateTime, server_default=db.func.now())
 
-    user = db.relationship("User", backref="plaid_items")  # 关联用户表
+    user = db.relationship("User", back_populates="plaid_items")  # 关联用户表
 
     def __repr__(self):
         return f"<PlaidItem {self.id}>"
@@ -90,15 +92,19 @@ def login():
         password = request.form['password']
         user = User.query.filter_by(username=username).first()
         if user and user.password == password:
+            session['user_id'] = user.id
             login_user(user)
             return redirect(url_for('dashboard'))
     return render_template('login.html')
 
 # Dashboard route (protected by login)
-@app.route('/dashboard')
+@app.route('/dashboard', methods=['GET'])
 @login_required
 def dashboard():
-    return 'Welcome to the dashboard'
+    user_data = db.session.query(User).filter_by(id=session['user_id']).first()
+    accounts = db.session.query(PlaidItem).filter_by(user_id=user_data.id).all()
+
+    return render_template('dashboard.html', user=user_data, accounts=accounts)
 
 # Logout route
 @app.route('/logout')
