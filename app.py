@@ -13,6 +13,7 @@ from plaid.model.country_code import CountryCode
 from plaid.model.products import Products
 import os
 from dotenv import load_dotenv
+import logging
 
 
 app = Flask(__name__)
@@ -20,6 +21,9 @@ app.config['SECRET_KEY'] = 'your_secret_key'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://username:your_password@localhost/expenses'
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
+
+logging.basicConfig(level=logging.INFO)
+app.logger.setLevel(logging.INFO)
 
 # 加载环境变量
 load_dotenv()
@@ -180,6 +184,26 @@ def get_plaid_items():
         'item_id': item.item_id,
         'created_at': item.created_at
     } for item in items])
+
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    data = request.json
+    app.logger.info(f"Received webhook: {data}")
+    item_id = data.get('item_id')
+    new_transactions = data.get('transactions', [])
+
+    # 更新数据库
+    for txn in new_transactions:
+        new_txn = db.Transaction(
+            plaid_item_id=item_id,
+            transaction_id=txn['transaction_id'],
+            amount=txn['amount'],
+            description=txn['description'],
+        )
+        db.session.add(new_txn)
+
+    db.session.commit()
+    return jsonify({"status": "success"}), 200
 
 
 if __name__ == '__main__':
