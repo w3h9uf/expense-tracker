@@ -45,9 +45,25 @@ login_manager.login_view = 'login'
 
 # User model
 class User(UserMixin, db.Model):
+    __tablename__ = "user"
+
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
     password = db.Column(db.String(150), nullable=False)
+
+class PlaidItem(db.Model):
+    __tablename__ = "plaid_items"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)  # 外键
+    access_token = db.Column(db.String(255), nullable=False)
+    item_id = db.Column(db.String(255), nullable=False, unique=True)
+    created_at = db.Column(db.DateTime, server_default=db.func.now())
+
+    user = db.relationship("User", backref="plaid_items")  # 关联用户表
+
+    def __repr__(self):
+        return f"<PlaidItem {self.id}>"
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -127,6 +143,15 @@ def exchange_public_token():
         # 调用 Plaid API
         response = plaid_client.item_public_token_exchange(request_data)
 
+        access_token = response.access_token
+        item_id = response.item_id
+        user_id = 1  # 假设你已经有用户系统
+
+        # 保存到数据库
+        plaid_item = PlaidItem(user_id=user_id, access_token=access_token, item_id=item_id)
+        db.session.add(plaid_item)
+        db.session.commit()
+
         # 返回 access_token 和其他信息
         return jsonify({
             'access_token': response.access_token,
@@ -138,6 +163,18 @@ def exchange_public_token():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/plaid_items', methods=['GET'])
+def get_plaid_items():
+    items = PlaidItem.query.all()
+    return jsonify([{
+        'id': item.id,
+        'user_id': item.user_id,
+        'access_token': item.access_token,
+        'item_id': item.item_id,
+        'created_at': item.created_at
+    } for item in items])
+
 
 if __name__ == '__main__':
     app.run(debug=True)
